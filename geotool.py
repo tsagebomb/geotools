@@ -1,7 +1,8 @@
 #
-# this is drity AF, it works
+# this is drity AF but it works
 # Created by Taylor B. Sage
 # TODO: Remove redundent datum 'stuff' pulled from: https://www.oc.nps.edu/oc2902w/coord/llhxyz.htm Javascript
+# 
 # 
 
 import numpy as np
@@ -11,37 +12,36 @@ from sklearn.preprocessing import PolynomialFeatures
 # using wgs84 
 # TODO: create a datum ojbect for this
 
-wgs84a = 6378.137
-wgs84f = 1.0/298.257223563
-wgs84b = wgs84a * ( 1.0 - wgs84f )
+def datum(a, b, f):
+    f = 1-b/a
+    eccsq = 1 - (b*b)/(a*a)
+    ecc = np.sqrt(eccsq)
+        
+    return {
+    "a" : a,
+    "b" : b,
+    "f" : f,
+    "ecc" : ecc,
+    "eccsq" : eccsq
+    }
 
-a = wgs84a
-b = wgs84b
+def wgs84Datum():
+    wgs84a = 6378.137
+    wgs84f = 1.0/298.257223563
+    wgs84b = wgs84a * ( 1.0 - wgs84f )
+    return datum(wgs84a,wgs84b,wgs84f)
 
-f = 1-b/a
-eccsq = 1 - b*b/(a*a)
-ecc = np.sqrt(eccsq)
+wgs84 = wgs84Datum()
 
-EARTH_A = a
-EARTH_B = b
-EARTH_F = f
-EARTH_Ecc = ecc
-EARTH_Esq = eccsq
-
-
-def radcur(lati):
+def radcur(lat):
 
         dtr = np.pi/180.0
 
-        a = EARTH_A
-        b = EARTH_B
+        a = wgs84['a']
+        b = wgs84['b']
 
-        asq   = a*a
-        bsq   = b*b
-        eccsq  =  1 - bsq/asq
-        ecc = np.sqrt(eccsq)
-
-        lat   =  lati
+        eccsq  = wgs84['eccsq']
+        ecc = wgs84['ecc']
 
         clat  =  np.cos(dtr*lat)
         slat  =  np.sin(dtr*lat)
@@ -74,7 +74,7 @@ def latlonelv_xyz(flat, flon, altkmi):
         rn     = rrnrm[1]
         re     = rrnrm[0]
 
-        ecc    = EARTH_Ecc
+        ecc    = wgs84['ecc']
         esq    = ecc*ecc
 
         x =  (rn + altkm) * clat * clon
@@ -91,14 +91,12 @@ def rearth (lati):
     return r
 
 
-def gd2gc (flatgdi, altkmi ):
+def gd2gc (flatgd, altkm ):
+
     dtr   = np.pi/180.0
     rtd   = 1/dtr
 
-    flatgd = flatgdi
-    altkm  =  altkmi
-
-    ecc   =  EARTH_Ecc
+    ecc   =  wgs84['ecc']
     esq   =  ecc*ecc
 
     altnow  =  altkm
@@ -108,21 +106,18 @@ def gd2gc (flatgdi, altkmi ):
 
     ratio   = 1 - esq*rn/(rn+altnow)
 
-    tlat    = pi.tan(dtr*flatgd) * ratio
+    tlat    = pi.tan(dtr*flatgd) / ratio
     flatgc  = rtd * pi.arctan(tlat)
 
     return  flatgc
 
 
-def gc2gd (flatgci, altkmi ):
+def gc2gd (flatgc, altkm):
 
     dtr   = np.pi/180.0
     rtd   = 1/dtr
 
-    flatgc=  flatgci
-    altkm =  altkmi
-
-    ecc   =  EARTH_Ecc
+    ecc   =  wgs84['ecc']
     esq   =  ecc*ecc
 
     altnow  =  altkm
@@ -148,13 +143,14 @@ def gc2gd (flatgci, altkmi ):
 def xyz_latlonelv ( xvec ):
 
     dtr =  np.pi/180.0
-    esq    =  EARTH_Esq
+    esq    =  wgs84["ecc"]*wgs84["ecc"]
 
     x      = xvec[0]
     y      = xvec[1]
     z      = xvec[2]
 
-    rp = np.sqrt(xvec[0] * xvec[0] +  xvec[1] * xvec[1] +  xvec[2] * xvec[2] )
+    rp = np.sqrt(np.dot(xvec,  xvec.T))
+#    rp = np.sqrt(xvec[0] * xvec[0] +  xvec[1] * xvec[1] +  xvec[2] * xvec[2] )
     
     flatgc = np.arcsin ( xvec[2] / rp )/dtr
 
@@ -206,6 +202,7 @@ def xyz_latlonelv ( xvec ):
 
 # Path prediction/interpolation 
 # linear regression for a 3 degree poly based on a dataset of N length, projects ahead based on the time diff mean.
+# geoloc is a [[lat,lon],...], time is [[time],...], elv [[elv],...] (In Km)
 
 def interpolate(geoloc, time, elv):
 
